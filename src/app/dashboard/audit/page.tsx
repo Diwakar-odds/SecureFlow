@@ -8,23 +8,44 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { Search, Filter, Download, User, Activity, Database } from "lucide-react";
+// Swapped User for Shield
+import { Search, Filter, Download, Shield, Activity, Database } from "lucide-react"; 
 import prisma from "@/lib/prisma";
+import { auth } from "@/auth";
+import { redirect } from "next/navigation";
 
 export default async function AuditPage() {
-  // Fetch real logs from the DB
-  const logs = await prisma.auditLog.findMany({
-    orderBy: { timestamp: 'desc' },
-    take: 100, // Limit to 100 recent logs for performance
-  });
+  const session = await auth();
+  
+  if (!session?.user?.id) {
+    redirect("/api/auth/signin");
+  }
+  
+  const userId = session.user.id;
 
-  // Calculate stats dynamically
-  const activeAdminsCount = await prisma.user.count();
+  // Fetch real logs belonging to the user
+  const logs = await prisma.auditLog.findMany({
+    where: { userId },
+    orderBy: { timestamp: 'desc' },
+    take: 100, 
+  });
+  
+  // REPLACED global user count with user-specific active repositories count
+  const activeReposCount = await prisma.repository.count({
+    where: { 
+      userId,
+      isActive: true
+    }
+  });
   
   const yesterday = new Date();
   yesterday.setDate(yesterday.getDate() - 1);
+  
   const actions24hCount = await prisma.auditLog.count({
-    where: { timestamp: { gte: yesterday } }
+    where: { 
+      userId,
+      timestamp: { gte: yesterday } 
+    }
   });
 
   return (
@@ -42,15 +63,17 @@ export default async function AuditPage() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {/* REPLACED the Active Admins card with Monitored Repositories */}
         <div className="bg-white/5 rounded-xl border border-white/10 p-4 flex items-center gap-4">
           <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
-            <User className="w-5 h-5" />
+            <Shield className="w-5 h-5" />
           </div>
           <div>
-            <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Active Admins</div>
-            <div className="text-lg font-bold">{activeAdminsCount} Users</div>
+            <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Monitored Repos</div>
+            <div className="text-lg font-bold">{activeReposCount} Active</div>
           </div>
         </div>
+        
         <div className="bg-white/5 rounded-xl border border-white/10 p-4 flex items-center gap-4">
           <div className="w-10 h-10 rounded-lg bg-secondary/10 flex items-center justify-center text-secondary">
             <Activity className="w-5 h-5" />
@@ -60,6 +83,7 @@ export default async function AuditPage() {
             <div className="text-lg font-bold">{actions24hCount.toLocaleString()} (24h)</div>
           </div>
         </div>
+        
         <div className="bg-white/5 rounded-xl border border-white/10 p-4 flex items-center gap-4">
           <div className="w-10 h-10 rounded-lg bg-purple-500/10 flex items-center justify-center text-purple-400">
             <Database className="w-5 h-5" />

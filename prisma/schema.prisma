@@ -16,8 +16,12 @@ model User {
   accounts      Account[]
   sessions      Session[]
   
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  // Add these relation fields
+  repositories  Repository[]
+  policies      Policy[]
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 }
 
 model Account {
@@ -65,6 +69,11 @@ model Repository {
   fullName     String
   owner        String
   isActive     Boolean       @default(true)
+  
+  // Link to the User
+  userId       String
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
   pullRequests PullRequest[]
   createdAt    DateTime      @default(now())
 }
@@ -110,6 +119,11 @@ model Policy {
   name      String
   rules     Json
   isActive  Boolean  @default(true)
+  
+  // Link to the User
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
   createdAt DateTime @default(now())
 }
 

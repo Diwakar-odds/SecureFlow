@@ -4,10 +4,21 @@ import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Lock, AlertCircle, ShieldCheck, HelpCircle, Plus } from "lucide-react";
 import prisma from "@/lib/prisma";
+import { auth } from "@/auth";
+import { redirect } from "next/navigation";
 
 export default async function PoliciesPage() {
-  // Fetch real policies from the DB
+  const session = await auth();
+  
+  if (!session?.user?.id) {
+    redirect("/api/auth/signin");
+  }
+  
+  const userId = session.user.id;
+
+  // Fetch only this user's policies
   const policies = await prisma.policy.findMany({
+    where: { userId },
     orderBy: { createdAt: 'desc' }
   });
 
@@ -31,8 +42,6 @@ export default async function PoliciesPage() {
         )}
         
         {policies.map((policy) => {
-          // Parse the JSON rules field based on our expected metadata structure
-          // Prisma types Json as any/JsonValue, so we safely cast to extract info
           const rulesMeta = (policy.rules as any) || {};
           
           return (

@@ -64,20 +64,6 @@ export function DashboardSidebar() {
           );
         })}
       </nav>
-
-      <div className="mt-auto">
-        <div className="p-4 rounded-xl bg-white/5 border border-white/10 mb-6">
-          <div className="text-xs font-bold mb-1">Developer Plan</div>
-          <div className="text-[10px] text-muted-foreground mb-3">1,248 / 5,000 scans</div>
-          <div className="h-1.5 w-full bg-white/5 rounded-full overflow-hidden">
-            <div className="h-full bg-primary" style={{ width: '25%' }} />
-          </div>
-        </div>
-        <button className="flex items-center gap-3 px-3 py-2 text-sm text-muted-foreground hover:text-white w-full">
-          <Settings className="w-4 h-4" />
-          Settings
-        </button>
-      </div>
     </aside>
   );
 }
@@ -87,19 +73,10 @@ export function DashboardHeader() {
     <header className="h-16 border-b border-white/5 px-8 flex items-center justify-between glass-card sticky top-0 z-40">
       <div className="flex items-center gap-4">
         <div className="text-sm text-muted-foreground">
-          <span className="text-white font-medium">Organization</span> / Acme Corp
+          <span className="text-white font-medium">User</span> / Acme Corp
         </div>
       </div>
       <div className="flex items-center gap-4">
-        <div className="relative">
-          <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none">
-            <Search className="w-4 h-4 text-muted-foreground" />
-          </div>
-          <input 
-            className="bg-white/5 border border-white/10 rounded-lg pl-9 pr-4 py-1.5 text-xs w-64 focus:outline-none focus:ring-1 focus:ring-primary/30" 
-            placeholder="Search PRs, repos..."
-          />
-        </div>
         <div className="w-8 h-8 rounded-full bg-primary/20 border border-primary/30 flex items-center justify-center text-[10px] font-bold">
           JD
         </div>
