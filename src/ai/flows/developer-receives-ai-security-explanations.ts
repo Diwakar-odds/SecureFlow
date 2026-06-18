@@ -59,16 +59,24 @@ ${validatedInput.codeSnippet}
 """
 
 Please provide a plain-English explanation and specific remediation suggestions based on the above finding.
-Respond strictly in JSON format. The response MUST exactly match this structure, where both values are plain strings:
+Respond strictly in JSON format matching this structure:
 {
   "explanation": "<string containing the plain-English explanation>",
   "remediationSuggestions": "<string containing the actionable steps>"
 }`;
 
-  // Make the API call to Groq
+  // Make the API call to Groq with strengthened strict JSON safety rules
   const chatCompletion = await groq.chat.completions.create({
     messages: [
-      { role: 'system', content: 'You are a helpful assistant that strictly outputs JSON.' },
+      { 
+        role: 'system', 
+        content: `You are an elite application security assistant that strictly outputs valid JSON objects.
+        
+CRITICAL JSON MODE SAFETY RULES:
+1. Every response must strictly conform to a single flat JSON object containing "explanation" and "remediationSuggestions" keys.
+2. Inside your text values, if you write code examples, strings, configurations, or syntax references, you MUST use single quotes (') or markdown backticks (\`) instead of double quotes ("). 
+3. NEVER output unescaped double quotes or broken backslash-escapes inside your string properties. Ensure all brackets and quotes are perfectly balanced.`
+      },
       { role: 'user', content: prompt }
     ],
     // model: 'llama-3.3-70b-versatile',

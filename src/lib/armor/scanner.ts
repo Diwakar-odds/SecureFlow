@@ -41,7 +41,7 @@ function shouldIgnore(filename: string): boolean {
     return true;
   }
 
-  // 3. Ignore configuration wrappers
+  // 3. Ignore configuration wrappers (Note: .env.example is intentionally NOT ignored here)
   const ignorePatterns = ['package.json', 'components.json', 'prisma.config.ts', '.gitignore'];
   if (ignorePatterns.some(pattern => lower.includes(pattern))) {
     return true;
@@ -109,7 +109,7 @@ export class ArmorIQScanner {
     // 2. Updated prompt format to explicitly require a valid root object with a "findings" key
     const prompt = `Analyze the following aggregated code changes from a Pull Request for security vulnerabilities.
 Look for:
-1. Hardcoded secrets (actual string values like "sk-...").
+1. Hardcoded secrets (actual active production string values like a valid "sk-proj-..." key or high-entropy credentials).
 2. Contextual leaks (explicitly logging variables to the console or exposing them to clients).
 3. Logic flaws.
 
@@ -151,9 +151,14 @@ Format:
 CRITICAL RULES:
 1. ONLY flag actual, executable vulnerabilities in the code structure.
 2. IGNORE theoretical or infrastructure-level risks (e.g., do not flag environment variables just because a server "could" be compromised).
-3. IGNORE any code found inside strings, comments, or template literals. Do not scan text that is meant to be a prompt or instruction.
-4. Reading from "process.env" or importing "dotenv" is strictly SAFE and expected backend behavior. NEVER flag this.
-5. You MUST return a root JSON object with a "findings" key array. The field "codeSnippet" MUST be returned strictly as a single flat string.` 
+3. Reading from "process.env" or importing "dotenv" is strictly SAFE and expected backend behavior. NEVER flag this.
+4. You MUST return a root JSON object with a "findings" key array. The field "codeSnippet" MUST be returned strictly as a single flat string.
+
+5. ENVIRONMENT & TEMPLATE PLACEHOLDER FILTER RULES:
+   - When scanning environment template files (such as .env.example), you MUST differentiate between mock placeholders and real credentials.
+   - NEVER flag values that contain generic filler text, descriptions, or standard placeholders. 
+   - Explicitly IGNORE values containing words like: "your_", "actual_", "secret_here", "_id_here", "generate_a_random", "localhost", "user:password", "your_webhook_secret", or "-----BEGIN RSA PRIVATE KEY-----\\n...". These are safe templates.
+   - ONLY flag a line if the value contains a specific, high-entropy alphanumeric string (e.g. an actual active production token or key) that was clearly pasted by a developer by mistake.` 
             },
             { role: 'user', content: prompt }
           ],
