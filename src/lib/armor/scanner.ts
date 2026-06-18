@@ -71,7 +71,9 @@ const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 function filterFalsePositives(findings: ScanFinding[]): ScanFinding[] {
   const safePlaceholders = [
     'your_', 'actual_', 'secret_here', 'placeholder', 
-    'user:password', 'auth_secret', 'localhost', '127.0.0.1'
+    'user:password', 'auth_secret', 'localhost', '127.0.0.1',
+    'example', 'dummy', 'replace_me', 'changeme',
+    '<', '>', '{', '}', '[', ']'
   ];
 
   return findings.filter(finding => {
@@ -80,14 +82,21 @@ function filterFalsePositives(findings: ScanFinding[]): ScanFinding[] {
 
     // 1. Filter out mock secrets in environment templates
     if (lowerFile.includes('.env.example') || lowerFile.includes('.env.sample')) {
-      // If the flagged snippet contains known placeholder text, discard it
+      
+      // Drop if it contains a known placeholder word or structural brackets
       if (safePlaceholders.some(safeWord => lowerSnippet.includes(safeWord))) {
-        console.log(`🧹 Filtered false positive in ${finding.fileLocation}: Snippet contained mock placeholder.`);
+        console.log(`🧹 Filtered false positive in ${finding.fileLocation}: Contained mock placeholder syntax.`);
         return false;
+      }
+      
+      // Drop if the value is empty, e.g., API_KEY= or API_KEY="" or API_KEY=''
+      if (/=\s*(""|''|)$/.test(lowerSnippet)) {
+         console.log(`🧹 Filtered false positive in ${finding.fileLocation}: Value is empty.`);
+         return false;
       }
     }
 
-    // 2. Filter out mock credentials and intentional console logs in seed files
+    // 2. Filter out mock credentials in seed files
     if (lowerFile.includes('seed.ts')) {
       if (safePlaceholders.some(safeWord => lowerSnippet.includes(safeWord))) return false;
       if (lowerSnippet.includes('console.error') || lowerSnippet.includes('console.log')) return false;
@@ -95,14 +104,9 @@ function filterFalsePositives(findings: ScanFinding[]): ScanFinding[] {
 
     // 3. Filter out false logic flaws in Prisma schemas
     if (lowerFile.includes('schema.prisma')) {
-      // If it complains about an Int or String type exposing data, drop it
-      if (lowerSnippet.includes('int') || lowerSnippet.includes('string')) {
-        console.log(`🧹 Filtered false positive in ${finding.fileLocation}: Schema data type flagged as logic flaw.`);
-        return false;
-      }
+      if (lowerSnippet.includes('int') || lowerSnippet.includes('string')) return false;
     }
 
-    // If it passed all programmatic filters, keep the finding
     return true;
   });
 }
@@ -169,7 +173,9 @@ Look strictly for the following configured issues:
 ${policyInstructions}
 
 The changes are organized under individual <file> tags. 
-CRITICAL: Track which file the code snippet belongs to and report its exact name in the 'fileLocation' field.
+CRITICAL RULES SCOPED BY FILE TYPE:
+- For '.env.example' or '.env' files: ONLY flag a line if the right side of the equals sign contains a REAL, active credential (e.g., a long random alphanumeric string, a hash, or a valid token). DO NOT flag lines with descriptive text, empty quotes, or generic placeholders.
+- For '.ts' or '.js' files: You MUST flag any instance of 'console.log(process.env...)' as a CRITICAL contextual leak or any 'console.log(<variable>)' where the 'variable' is instantiated with 'process.env...'.
 
 Aggregated Code Changes:
 ${combinedContent}
@@ -179,7 +185,7 @@ Format:
 {
   "findings": [
     {
-      "reasoning": "Step 1: Explain exactly why this snippet is an executable vulnerability. If it is just a string description, a Prisma schema type, or a safe mock variable, do not flag it.",
+      "reasoning": "Step 1: Explain exactly why this snippet is an executable vulnerability. If it is just a string description, a safe mock variable, or a schema type, do not flag it.",
       "type": "Secret | Vulnerability | Misconfig",
       "severity": "CRITICAL | HIGH | MEDIUM | LOW",
       "description": "Detailed explanation.",
