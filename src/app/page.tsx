@@ -4,7 +4,9 @@ import { Button } from '@/components/ui/button';
 import { Shield, Lock, Github, ArrowRight, CheckCircle, Search, Cpu, ChevronDown, GitPullRequest, ScanSearch, GitMerge } from 'lucide-react';
 import Image from 'next/image';
 import { LoginButton } from '@/components/ui/login-button';
+import { ThemeToggle } from '@/components/theme-toggle';
 
+export const dynamic = 'force-dynamic';
 export default function LandingPage() {
   return (
     <div className="min-h-screen bg-background text-foreground flex flex-col">
@@ -22,7 +24,11 @@ export default function LandingPage() {
           </div>
           <span className="font-headline font-bold text-xl tracking-tight">SecureFlow</span>
         </div>
+
         <div className="flex items-center gap-2 sm:gap-4">
+          <div className="flex items-center gap-4">
+            <ThemeToggle />
+          </div>
           <LoginButton />
           <Link href={process.env.GITHUB_APP_URL!}>
             <Button className="bg-primary text-background hover:bg-primary/90 glow-primary">
@@ -138,7 +144,7 @@ export default function LandingPage() {
           <div className="grid md:grid-cols-3 gap-8">
             <FeatureCard 
               icon={<Search className="text-primary w-6 h-6" />}
-              title="ArmorIQ Scanner"
+              title="Scanner"
               description="Deep-context scanning for API keys, AWS credentials, and thousands of known vulnerability signatures."
             />
             <FeatureCard 
@@ -148,7 +154,7 @@ export default function LandingPage() {
             />
             <FeatureCard 
               icon={<Shield className="text-primary w-6 h-6" />}
-              title="ArmorIQ Policies"
+              title="Policies"
               description="Define custom merge gates based on severity and finding type. Automate security decisions at scale."
             />
           </div>
