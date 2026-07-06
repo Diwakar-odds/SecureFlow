@@ -55,50 +55,57 @@ export default function DashboardClient({ stats, prs, chartData, distribution }:
       </div>
 
       {/* Charts Section */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-         
-         <Card className="lg:col-span-2 glass-card">
-  <CardHeader className="flex flex-row items-center justify-between">
-    <CardTitle className="text-sm font-bold">
-      Scan Activity
-    </CardTitle>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8">
 
-    <Badge
-      variant="outline"
-      className="border-primary/20 bg-primary/5 text-primary"
-    >
-      Last 30 Days
-    </Badge>
-  </CardHeader>
+        <Card className="lg:col-span-2 glass-card">
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle className="text-sm font-bold">
+              Scan Activity
+            </CardTitle>
 
-  <CardContent className="h-[300px]">
-    {chartData.length === 0 ? (
-      <div className="flex h-full flex-col items-center justify-center rounded-xl border border-dashed border-white/10 text-center">
-        <Zap className="mb-4 h-12 w-12 text-primary opacity-60" />
+            <Badge
+              variant="outline"
+              className="border-primary/20 bg-primary/5 text-primary"
+            >
+              Last 30 Days
+            </Badge>
+          </CardHeader>
 
-        <h3 className="text-lg font-semibold">
-          No Scan Activity
-        </h3>
+          <CardContent className="h-[300px]">
+            {chartData.length === 0 ? (
+              <div className="flex h-full flex-col items-center justify-center rounded-xl border border-dashed border-white/10 text-center">
+                <Zap className="mb-4 h-12 w-12 text-primary opacity-60" />
 
-        <p className="mt-2 max-w-sm text-sm text-muted-foreground">
-          Run your first repository scan to start visualizing scan activity over time.
-        </p>
-      </div>
-    ) : (
-      <ResponsiveContainer width="100%" height="100%">
-        <AreaChart data={chartData}>
-          <Area
-            type="monotone"
-            dataKey="scans"
-            stroke="hsl(var(--primary))"
-            strokeWidth={2}
-            fill="url(#colorScans)"
-          />
-        </AreaChart>
-      </ResponsiveContainer>
-    )}
-  </CardContent>
-</Card>
+                <h3 className="text-lg font-semibold">
+                  No Scan Activity
+                </h3>
+
+                <p className="mt-2 max-w-sm text-sm text-muted-foreground">
+                  Run your first repository scan to start visualizing scan activity over time.
+                </p>
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={chartData}>
+                  <defs>
+                    <linearGradient id="colorScans" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.4} />
+                      <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+
+                  <Area
+                    type="monotone"
+                    dataKey="scans"
+                    stroke="hsl(var(--primary))"
+                    strokeWidth={2}
+                    fill="url(#colorScans)"
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
+            )}
+          </CardContent>
+        </Card>
 
         {/* Dynamic Severity Distribution */}
         <Card className="glass-card">
@@ -156,53 +163,70 @@ export default function DashboardClient({ stats, prs, chartData, distribution }:
         <CardHeader className="pb-4"><CardTitle className="text-lg font-bold">Recent Pull Requests</CardTitle></CardHeader>
         <CardContent>
           <div className="space-y-4">
-   
             {prs.length === 0 ? (
-  <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-white/10 py-14 text-center">
-    <GitPullRequest className="mb-4 h-12 w-12 text-muted-foreground opacity-50" />
-    <h3 className="text-lg font-semibold">No Pull Requests Yet</h3>
-    <p className="mt-2 max-w-sm text-sm text-muted-foreground">
-     Connect a repository and run a scan to view pull requests, security findings, and policy results here.
-    </p>
-  </div>
-) : (
-  prs.map((pr) => (
-    <div
-      key={pr.id}
-       className="group flex items-center justify-between rounded-xl border border-white/10 bg-white/5 p-4 transition-all duration-300 hover:-translate-y-1 hover:border-primary/40 hover:bg-white/10 hover:shadow-lg"
-    >
-      <div className="flex items-center gap-4">
-        <GitPullRequest className="w-5 h-5 text-muted-foreground" />
-        <div>
-          <div className="font-bold text-sm mb-1 flex items-center gap-2">
-            {pr.title}
-            <Badge variant="secondary" className="text-[10px] py-0">
-              #{pr.prNumber}
-            </Badge>
-          </div>
+              <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-white/10 py-14 text-center">
+                <GitPullRequest className="mb-4 h-12 w-12 text-muted-foreground opacity-50" />
 
-          <div className="text-[10px] text-muted-foreground flex items-center gap-3">
-            <span>{new Date(pr.createdAt).toLocaleDateString()}</span>
-            <span className="text-primary">{pr.repository.fullName}</span>
-          </div>
-        </div>
-      </div>
+                <h3 className="text-lg font-semibold">
+                  No Pull Requests Yet
+                </h3>
 
-      <span
-       className={
-    pr.status === "BLOCKED"
-      ? "bg-red-500/20 text-red-300"
-      : pr.status === "PASS"
-      ? "bg-green-500/20 text-green-300"
-      : "bg-yellow-500/20 text-yellow-300"
-  }
->
-  {pr.status}
-      </span>
-    </div>
-  ))
-)}
+                <p className="mt-2 max-w-sm text-sm text-muted-foreground">
+                  Connect a repository and run a scan to view pull requests,
+                  security findings, and policy results here.
+                </p>
+              </div>
+            ) : (
+              prs.map((pr) => (
+                <div
+                  key={pr.id}
+                  className="group flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 rounded-xl border border-white/10 bg-white/5 p-4 transition-all duration-300 hover:-translate-y-1 hover:border-primary/40 hover:bg-white/10 hover:shadow-lg"
+                >
+                  <div className="flex items-start sm:items-center gap-3">
+                    <GitPullRequest className="mt-0.5 h-5 w-5 shrink-0 text-muted-foreground sm:mt-0" />
 
+                    <div className="min-w-0">
+                      <div className="mb-1 flex flex-wrap items-center gap-2 text-sm font-bold">
+                        <span className="truncate">
+                          {pr.title}
+                        </span>
+
+                        <Badge
+                          variant="secondary"
+                          className="shrink-0 py-0 text-[10px]"
+                        >
+                          #{pr.prNumber}
+                        </Badge>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-2 text-[10px] text-muted-foreground">
+                        <span>
+                          {new Date(pr.createdAt).toLocaleDateString()}
+                        </span>
+
+                        <span className="max-w-[180px] truncate text-primary sm:max-w-none">
+                          {pr.repository.fullName}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center pl-8 sm:pl-0">
+                    <span
+                      className={`rounded-full px-3 py-1 text-xs font-semibold ${
+                        pr.status === "BLOCKED"
+                          ? "bg-red-500/20 text-red-300"
+                          : pr.status === "PASS"
+                          ? "bg-green-500/20 text-green-300"
+                          : "bg-yellow-500/20 text-yellow-300"
+                      }`}
+                    >
+                      {pr.status}
+                    </span>
+                  </div>
+                </div>
+              ))
+            )}
           </div>
         </CardContent>
       </Card>
