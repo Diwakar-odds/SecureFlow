@@ -14,10 +14,10 @@
 
 ## Style Guidelines:
 
-- **Primary Color**: Vibrant Deep Violet (`#927BFF`) — providing a futuristic and high-tech feel that contrasts against deep surfaces, echoing the crew's iconic red against a shadowy palette.
-- **Background Color**: Deep Graphite Charcoal (`#0C0B0F`) — a desaturated variation of the primary hue to create an immersive, distraction-free dark interface, like the inside of the Vault itself.
-- **Accent Color**: Electric Azure (`#4D7BFF`) — an analogous hue that provides strong functional contrast for success states and interactive call-to-actions ("Audit Passed" moments).
-- **Font Pairing**: 'Space Grotesk' (Sans-serif) for sharp, technical-feeling headlines and 'Inter' (Sans-serif) for clean, highly-readable UI controls and density-rich scan results.
+- **Primary Color**: Heist Red (`hsl(356 96% 47%)` ≈ `#EB0514`) — the signature red of the crew's jumpsuits, used for primary actions, alerts, and the accent color throughout the app.
+- **Background Color**: Deep Cinematic Black (`hsl(0 0% 4%)` ≈ `#0A0A0A`) in dark mode — evoking the shadows of the vault. Light mode uses a crisp off-white (`hsl(0 0% 98%)`) for high-contrast daytime use.
+- **Card/Surface Color**: Slightly raised black (`hsl(0 0% 7%)` ≈ `#121212`) to separate cards and panels from the background without breaking the dark aesthetic.
+- **Font Pairing**: 'Roboto' (Sans-serif) for bold, cinematic headlines and 'Inter' (Sans-serif) for clean, highly-readable body text and UI controls.
 - **Iconography**: Ultra-thin, mono-lineal strokes for icons, utilizing high-contrast borders to suggest precision and structural integrity — every line as deliberate as the heist itself.
 - **Layout**: Spacious, container-less dashboard layout with high-blur background glass effects (Glassmorphism) to define hierarchy without visual clutter.
 - **Motion**: Sophisticated micro-interactions using framer-motion, featuring rhythmic horizontal loaders that simulate continuous scanning pulses — The Professor, always watching.
