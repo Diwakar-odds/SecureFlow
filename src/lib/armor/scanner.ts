@@ -7,6 +7,8 @@ export type ScanFinding = {
   description: string;
   fileLocation: string;
   codeSnippet: string;
+  lineStart?: number;
+  lineEnd?: number;
 };
 
 export interface FileChange {
@@ -17,6 +19,24 @@ export interface FileChange {
 const groq = new Groq({
   apiKey: process.env.GROQ_API_KEY || 'dummy-key-for-build',
 });
+
+// --- Timeout / deadline guards -------------------------------------------------------------
+// A single malformed or maliciously-crafted diff (e.g. one engineered to make the LLM hang,
+// or a PR large enough to spawn many batches) must never be able to hang the scan indefinitely
+// or exhaust memory. These bound worst-case behavior explicitly rather than relying on the
+// HTTP client's own defaults (Groq's SDK default is 1 minute per request, with no cap at all
+// on the number of batches a large PR can produce).
+const SCAN_REQUEST_TIMEOUT_MS = 20_000; // hard cap per individual LLM call
+const MAX_TOTAL_SCAN_MS = 120_000; // hard cap across the whole scanPullRequest() call
+const MAX_RETRY_WAIT_MS = 15_000; // cap on any single rate-limit backoff wait
+
+// --- Recursive sanitization guards ---------------------------------------------------------
+// A single pass of `<`/`>` escaping can be defeated by nesting or stacking encodings (e.g.
+// HTML-entity-encoded entities, unicode escape sequences, zero-width characters used to split
+// up flagged keywords). sanitizeRecursively() normalizes until stable or these caps are hit,
+// so the normalization loop itself can't become a new hang/memory vector.
+const MAX_SANITIZE_ITERATIONS = 5;
+const MAX_SANITIZED_LENGTH = 100_000;
 
 // Non-executable text, assets, metadata or dependency configurations that shouldn't be audited
 const IGNORED_EXTENSIONS = [
@@ -34,7 +54,7 @@ function compileIgnorePatterns(patterns: string[]): RegExp[] {
     .map(p => p.trim())
     .filter(p => p.length > 0 && !p.startsWith('#'))
     .map(p => {
-      let pattern = p.replace(/\\/g, '/');
+      const pattern = p.replace(/\\/g, '/');
       const hasLeadingSlash = pattern.startsWith('/');
       const cleanPattern = hasLeadingSlash ? pattern.slice(1) : pattern;
       const patternWithoutTrailingSlash = cleanPattern.endsWith('/') ? cleanPattern.slice(0, -1) : cleanPattern;
@@ -143,6 +163,60 @@ function splitIntoChunks(text: string, maxChunkSize: number): string[] {
 
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
+// Decodes one layer of common obfuscation techniques used to smuggle instruction-like text
+// past keyword-based filters: HTML/numeric entities, zero-width and other invisible unicode
+// characters, and unicode confusable normalization (NFKC — e.g. fullwidth "ｉｇｎｏｒｅ" folds
+// to "ignore"). Returns the input unchanged if none of these apply.
+function decodeOneLayer(input: string): string {
+  let out = input;
+
+  // Named HTML entities relevant to prior escaping/obfuscation
+  out = out.replace(/&lt;/gi, '<').replace(/&gt;/gi, '>').replace(/&amp;/gi, '&').replace(/&quot;/gi, '"').replace(/&#0*39;|&apos;/gi, "'");
+
+  // Numeric HTML entities: decimal (&#105;) and hex (&#x69;)
+  out = out.replace(/&#x([0-9a-f]+);/gi, (_, hex) => {
+    const code = parseInt(hex, 16);
+    return Number.isFinite(code) ? String.fromCodePoint(code) : _;
+  });
+  out = out.replace(/&#(\d+);/g, (_, dec) => {
+    const code = parseInt(dec, 10);
+    return Number.isFinite(code) ? String.fromCodePoint(code) : _;
+  });
+
+  // Zero-width / invisible characters sometimes used to split up flagged keywords
+  // (ZWSP, ZWNJ, ZWJ, BOM/ZWNBSP, soft hyphen, word joiner, and other format-control chars).
+  out = out.replace(/[\u200B\u200C\u200D\uFEFF\u00AD\u2060\u180E]/g, '');
+
+  // Fold unicode confusables/compatibility variants (e.g. fullwidth or stylized letters) down
+  // to their canonical ASCII-equivalent form.
+  out = out.normalize('NFKC');
+
+  return out;
+}
+
+/**
+ * Repeatedly decodes obfuscation layers until the text stops changing (a fixed point) or a
+ * safety cap is hit, then escapes `<`/`>` once for safe embedding inside the <file> wrapper
+ * tags used downstream. Bounded by MAX_SANITIZE_ITERATIONS (in case of pathological input that
+ * never stabilizes) and MAX_SANITIZED_LENGTH (in case decoding causes the text to grow, e.g. a
+ * dense run of numeric entities expanding into multi-byte codepoints).
+ */
+export function sanitizeRecursively(input: string): string {
+  let current = input.length > MAX_SANITIZED_LENGTH ? input.slice(0, MAX_SANITIZED_LENGTH) : input;
+
+  for (let i = 0; i < MAX_SANITIZE_ITERATIONS; i++) {
+    if (current.length > MAX_SANITIZED_LENGTH) {
+      current = current.slice(0, MAX_SANITIZED_LENGTH);
+      break;
+    }
+    const next = decodeOneLayer(current);
+    if (next === current) break; // fixed point reached, no further obfuscation layers to peel
+    current = next;
+  }
+
+  return current.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
 function filterFalsePositives(findings: ScanFinding[]): ScanFinding[] {
   const safePlaceholders = [
     'your_', 'actual_', 'secret_here', 'placeholder', 
@@ -171,7 +245,7 @@ function filterFalsePositives(findings: ScanFinding[]): ScanFinding[] {
       }
     }
 
-    // 2. Filter out mock credentials in seed fileslas
+    // 2. Filter out mock credentials in seed files
     if (lowerFile.includes('seed.ts')) {
       if (safePlaceholders.some(safeWord => lowerSnippet.includes(safeWord))) return false;
       if (lowerSnippet.includes('console.error') || lowerSnippet.includes('console.log')) return false;
@@ -188,6 +262,9 @@ function filterFalsePositives(findings: ScanFinding[]): ScanFinding[] {
 
 export class ArmorIQScanner {
   async scanPullRequest(files: FileChange[], activePolicies: any[] = [], customIgnores: string[] = []): Promise<ScanFinding[]> {
+    const scanStartedAt = Date.now();
+    const deadlineExceeded = () => Date.now() - scanStartedAt > MAX_TOTAL_SCAN_MS;
+
     let currentBatch = '';
     let currentBatchFiles: string[] = [];
     const allFindings: ScanFinding[] = [];
@@ -207,7 +284,17 @@ export class ArmorIQScanner {
       policyInstructions += `\n\nCRITICAL: DO NOT focus on or flag general vulnerabilities like SQL injection, XSS, or logic flaws. ONLY FOCUS ON THE DEFAULT SECRET-RELATED ISSUES ABOVE.`;
     }
 
+    let deadlineHit = false;
+
     for (const file of files) {
+      if (deadlineExceeded()) {
+        deadlineHit = true;
+        console.warn(
+          `⏱️ Scan deadline (${MAX_TOTAL_SCAN_MS / 1000}s) exceeded — skipping remaining files starting at ${file.filename}. Returning partial findings.`
+        );
+        break;
+      }
+
       if (shouldIgnore(file.filename, compiledCustomIgnores)) {
         console.log(`🛡️ Skipping ignored file: ${file.filename}`);
         continue;
@@ -247,9 +334,7 @@ export class ArmorIQScanner {
 
       const maxContentSize = MAX_COMBINED_LENGTH - wrapperOverhead;
 
-      const sanitizedLines = addedLines
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;');
+      const sanitizedLines = sanitizeRecursively(addedLines);
 
       const chunks =
         sanitizedLines.length > maxContentSize
@@ -320,7 +405,9 @@ Format:
       "severity": "CRITICAL | HIGH | MEDIUM | LOW",
       "description": "Detailed explanation.",
       "fileLocation": "The exact path/filename from the <file> tag",
-      "codeSnippet": "The specific problematic line(s)"
+      "codeSnippet": "The specific problematic line(s)",
+      "lineStart": 10,
+      "lineEnd": 12
     }
   ]
 }`;
@@ -350,9 +437,9 @@ CRITICAL RULES:
               },
               { role: 'user', content: prompt }
             ],
-            model: 'llama-3.1-8b-instant',
+            model: process.env.GROQ_MODEL || 'openai/gpt-oss-20b',
             response_format: { type: 'json_object' },
-          });
+          }, { timeout: SCAN_REQUEST_TIMEOUT_MS });
 
           const responseText = chatCompletion.choices[0]?.message?.content || '{"findings": []}';
           const result = JSON.parse(responseText);
@@ -378,7 +465,9 @@ CRITICAL RULES:
               severity: validSeverities.includes(upperSeverity) ? (upperSeverity as any) : 'MEDIUM',
               description: String(f.description || 'No description provided.'),
               fileLocation: String(f.fileLocation || 'Unknown file path'),
-              codeSnippet: normalizedSnippet
+              codeSnippet: normalizedSnippet,
+              lineStart: typeof f.lineStart === 'number' ? f.lineStart : undefined,
+              lineEnd: typeof f.lineEnd === 'number' ? f.lineEnd : undefined
             };
           });
 
@@ -388,14 +477,28 @@ CRITICAL RULES:
           lastError = error;
           if (error.status === 429) {
             const retryAfterHeader = error.headers?.get?.('retry-after') || error.headers?.['retry-after'];
-            const waitTime = retryAfterHeader ? parseInt(retryAfterHeader, 10) * 1000 : (4 - retries) * 25000;
-            
+            const requestedWait = retryAfterHeader ? parseInt(retryAfterHeader, 10) * 1000 : (4 - retries) * 25000;
+            const remainingBudget = MAX_TOTAL_SCAN_MS - (Date.now() - scanStartedAt);
+            const waitTime = Math.max(0, Math.min(requestedWait, MAX_RETRY_WAIT_MS, remainingBudget));
+
+            if (waitTime <= 0) {
+              console.warn(`⏱️ Scan deadline exceeded during rate-limit backoff — aborting retries for this batch.`);
+              break;
+            }
+
             console.warn(`⏳ Rate limit reached. Waiting ${waitTime / 1000} seconds...`);
             await delay(waitTime);
             retries--;
           } else if (error.status === 400 && error.error?.code === 'json_validate_failed') {
             console.warn(`⚠️ LLM generated invalid JSON. Retrying... (${retries} attempts left)`);
             retries--;
+          } else if (error instanceof Groq.APIConnectionTimeoutError || error?.name === 'APIConnectionTimeoutError') {
+            console.warn(`⏱️ LLM request exceeded ${SCAN_REQUEST_TIMEOUT_MS / 1000}s timeout. Retrying... (${retries} attempts left)`);
+            retries--;
+            if (deadlineExceeded()) {
+              console.warn(`⏱️ Scan deadline exceeded after a request timeout — aborting retries for this batch.`);
+              break;
+            }
           } else {
             console.error(`❌ Consolidated scan failed completely:`, error);
             break;
@@ -410,18 +513,22 @@ CRITICAL RULES:
       return findings;
     }
 
-    if (currentBatch.length > 0) {
+    if (currentBatch.length > 0 && !deadlineExceeded()) {
       const batchFindings = await processBatch(currentBatch, currentBatchFiles);
       allFindings.push(...batchFindings);
+    } else if (currentBatch.length > 0) {
+      deadlineHit = true;
+      console.warn(`⏱️ Scan deadline exceeded before the final batch (${currentBatchFiles.join(', ')}) could run — dropped from results.`);
+    }
+
+    if (deadlineHit) {
+      console.warn(
+        `⚠️ scanPullRequest() returned partial results: ${allFindings.length} finding(s) from a scan that hit its ${MAX_TOTAL_SCAN_MS / 1000}s deadline.`
+      );
     }
 
     return allFindings;
   }
 }
-
-// async function vulnerable_test(userInput: string) {
-//   await prisma.$queryRawUnsafe(`SELECT * FROM users WHERE name = ${userInput}`);
-//   console.log(process.env.GROQ_API_KEY);
-//
 
 export const scanner = new ArmorIQScanner();
