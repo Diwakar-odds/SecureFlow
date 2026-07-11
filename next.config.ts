@@ -35,6 +35,13 @@ const nextConfig: NextConfig = {
         port: '',
         pathname: '/**',
       },
+      // github.com/<user>.png fallback avatars used by the leaderboard
+      {
+        protocol: 'https',
+        hostname: 'github.com',
+        port: '',
+        pathname: '/**',
+      },
     ],
   },
 };

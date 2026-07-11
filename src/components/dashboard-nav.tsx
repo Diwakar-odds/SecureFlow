@@ -27,7 +27,6 @@ const NAV_ITEMS = [
   { name: "Vault Logs", href: "/dashboard/audit", icon: History },
 ];
 
-
 // ─── SidebarContent ───────────────────────────────────────────────────────────
 function SidebarContent({ onNavClick }: { onNavClick?: () => void }) {
   const pathname = usePathname();
@@ -150,7 +149,6 @@ export function DashboardHeader({
   };
   onMenuClick?: () => void;
 }) {
-
   return (
     <header className="h-16 border-b border-white/5 px-4 sm:px-8 flex items-center justify-between glass-card sticky top-0 z-40">
 
@@ -175,6 +173,7 @@ export function DashboardHeader({
 
       {/* ── Right: theme toggle + avatar + logout ─────────────── */}
       <div className="flex items-center gap-3 sm:gap-4">
+        {/* ThemeToggle is the leftmost item of this action cluster */}
         <ThemeToggle />
 
         {/* Avatar — glitch-dissolves between VenetianMask and GitHub avatar (see CyberAvatarReveal) */}
