@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { withRateLimit } from '@/lib/middleware/rateLimit';
 import { createHmac, timingSafeEqual } from 'crypto';
 import { scanner } from '@/lib/armor/scanner';
 import { iq } from '@/lib/armor/iq';
@@ -47,10 +48,14 @@ async function verifyGitHubWebhook(req: NextRequest): Promise<any> {
   return await req.json();
 }
 
-export async function POST(req: NextRequest) {
+import { githubWebhookSchema } from '@/lib/middleware/schemas';
+
+async function handler(req: NextRequest) {
 
   try {
-    const payload = await verifyGitHubWebhook(req);
+    const rawPayload = await verifyGitHubWebhook(req);
+    // Strict Zod validation
+    const payload: any = githubWebhookSchema.parse(rawPayload);
     const event = req.headers.get('x-github-event');
 
 
@@ -162,10 +167,10 @@ export async function POST(req: NextRequest) {
         });
         
         // Map toggles to efficiently check active status
-        const toggleMap = new Map(userToggles.map(t => [t.policyTemplateId, t.isActive]));
+        const toggleMap = new Map(userToggles.map((t: any) => [t.policyTemplateId, t.isActive]));
         
         // Filter to only include active templates
-        activePolicies = templates.filter(template => {
+        activePolicies = templates.filter((template: any) => {
           return toggleMap.has(template.id) 
             ? toggleMap.get(template.id) 
             : template.isDefault;
@@ -356,3 +361,5 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }
 }
+
+export const POST = withRateLimit(handler, { limit: 50, windowSeconds: 60, keyPrefix: 'webhook:github' });
